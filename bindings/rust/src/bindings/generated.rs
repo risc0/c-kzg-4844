@@ -78,11 +78,11 @@ pub struct KZGSettings {
     #[doc = " The length of `roots_of_unity`, a power of 2."]
     max_width: u64,
     #[doc = " Powers of the primitive root of unity determined by\n `SCALE2_ROOT_OF_UNITY` in bit-reversal permutation order,\n length `max_width`."]
-    roots_of_unity: *const fr_t,
+    roots_of_unity: *mut fr_t,
     #[doc = " G1 group elements from the trusted setup,\n in Lagrange form bit-reversal permutation."]
-    g1_values: *const g1_t,
+    g1_values: *mut g1_t,
     #[doc = " G2 group elements from the trusted setup."]
-    g2_values: *const g2_t,
+    g2_values: *mut g2_t,
 }
 extern "C" {
     pub fn load_trusted_setup(

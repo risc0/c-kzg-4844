@@ -156,19 +156,17 @@ impl KZGSettings {
     ///
     /// Creates a new `KZGSettings` instance that references data stored in the provided
     /// `RawKzgSettings`. The raw settings must have static lifetime.
-    ///
-    /// # Safety and Ownership
-    /// The returned instance contains pointers to the data in `raw`, not copies.
-    /// The caller must ensure that the destructor is not run (as it would
-    /// attempt to free memory it doesn't own)
     #[inline]
-    pub(crate) fn from_raw(raw: &'static RawKzgSettings) -> Result<Self, bytemuck::PodCastError> {
-        Ok(Self {
+    pub(crate) fn from_raw(
+        raw: &'static RawKzgSettings,
+    ) -> Result<&'static Self, bytemuck::PodCastError> {
+        let settings = Self {
             max_width: NUM_ROOTS_OF_UNITY as u64,
-            roots_of_unity: try_cast_slice(&raw.roots_of_unity)?.as_ptr(),
-            g1_values: try_cast_slice(&raw.g1_points)?.as_ptr(),
-            g2_values: try_cast_slice(&raw.g2_points)?.as_ptr(),
-        })
+            roots_of_unity: try_cast_slice::<_, fr_t>(&raw.roots_of_unity)?.as_ptr() as *mut fr_t,
+            g1_values: try_cast_slice::<_, g1_t>(&raw.g1_points)?.as_ptr() as *mut g1_t,
+            g2_values: try_cast_slice::<_, g2_t>(&raw.g2_points)?.as_ptr() as *mut g2_t,
+        };
+        Ok(Box::leak(Box::new(settings)))
     }
 
     /// Converts the settings to a heap-allocated raw representation.
@@ -748,7 +746,7 @@ mod tests {
     use super::*;
     use crate::KzgSettings;
     use rand::{rngs::ThreadRng, Rng};
-    use std::{fs, mem::ManuallyDrop, path::PathBuf};
+    use std::{fs, path::PathBuf};
     use test_formats::{
         blob_to_kzg_commitment_test, compute_blob_kzg_proof, compute_kzg_proof,
         verify_blob_kzg_proof, verify_blob_kzg_proof_batch, verify_kzg_proof,
@@ -763,8 +761,6 @@ mod tests {
         // Leak and pin the serialized buffer to obtain a slice with static lifetime.
         let raw = Box::leak(raw);
         let settings = KzgSettings::from_raw(raw).unwrap();
-        // Wrap in ManuallyDrop so that the destructor is not run.
-        let settings = ManuallyDrop::new(settings);
 
         unsafe {
             assert_eq!(

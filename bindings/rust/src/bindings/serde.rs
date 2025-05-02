@@ -82,7 +82,7 @@ mod tests {
     }
 
     fn trusted_setup_file() -> &'static Path {
-        Path::new("../../src/trusted_setup.txt")
+        Path::new("src/trusted_setup.txt")
     }
 
     #[test]
