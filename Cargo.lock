@@ -96,6 +96,7 @@ dependencies = [
  "bindgen",
  "blst",
  "bytemuck",
+ "c-kzg",
  "cc",
  "criterion",
  "glob",

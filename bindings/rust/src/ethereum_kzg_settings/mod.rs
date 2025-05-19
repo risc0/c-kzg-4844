@@ -5,7 +5,8 @@ use once_cell::sync::Lazy;
 static ETHEREUM_KZG_SETTINGS: Lazy<&'static KzgSettings> = Lazy::new(load_kzg_settings);
 
 /// Returns default Ethereum mainnet KZG settings.
-pub fn ethereum_kzg_settings(_precompute: u64) -> &'static KzgSettings {
+pub fn ethereum_kzg_settings(precompute: u64) -> &'static KzgSettings {
+    assert_eq!(precompute, 0);
     *ETHEREUM_KZG_SETTINGS
 }
 
@@ -48,9 +49,9 @@ fn load_kzg_settings() -> &'static KzgSettings {
             g1_values_monomial: *include_bytes!("g1_values_monomial.bin"),
             g1_values_lagrange_brp: *include_bytes!("g1_values_lagrange_brp.bin"),
             g2_values_monomial: *include_bytes!("g2_values_monomial.bin"),
-            #[cfg(feature = "x_ext_fft_columns")]
+            #[cfg(feature = "eip_7594")]
             x_ext_fft_columns: *include_bytes!("x_ext_fft_columns.bin"),
-            #[cfg(not(feature = "x_ext_fft_columns"))]
+            #[cfg(not(feature = "eip_7594"))]
             x_ext_fft_columns: [],
             scratch_size: 0,
         };
