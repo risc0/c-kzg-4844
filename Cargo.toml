@@ -47,6 +47,9 @@ risc0-ffi = []
 # files are generated from scratch
 generate_ethereum_kzg_settings = ["ethereum_kzg_settings", "std"]
 
+# When this is enabled, the preloaded x_ext_fft_columns is initialized
+x_ext_fft_columns = []
+
 [dependencies]
 arbitrary = { version = "1", features = ["derive"] }
 blst = { version = "0.3.14", default-features = false }

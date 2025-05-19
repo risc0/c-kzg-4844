@@ -114,8 +114,12 @@ pub(crate) struct RawKzgSettings {
     pub g1_values_lagrange_brp: [u8; NUM_G1_POINTS * size_of::<g1_t>()],
     #[doc = " G2 group elements from the trusted setup in monomial form.\n The array contains `NUM_G2_POINTS` elements."]
     pub g2_values_monomial: [u8; NUM_G2_POINTS * size_of::<g2_t>()],
+    #[cfg(feature = "x_ext_fft_columns")]
     #[doc = " Data used during FK20 proof generation."]
     pub x_ext_fft_columns: [u8; 2 * CELLS_PER_BLOB * FIELD_ELEMENTS_PER_CELL * size_of::<g1_t>()],
+    #[cfg(not(feature = "x_ext_fft_columns"))]
+    #[doc = " Data used during FK20 proof generation."]
+    pub x_ext_fft_columns: [u8; 0],
     #[doc = " The scratch size for the fixed-base MSM."]
     pub scratch_size: usize,
 }
@@ -180,14 +184,17 @@ impl KZGSettings {
         raw: &'static RawKzgSettings,
     ) -> Result<&'static Self, bytemuck::PodCastError> {
         // allocate and leak memory for the table
-        let mut x_ext_fft_columns = Vec::with_capacity(2 * CELLS_PER_BLOB);
-        for column in raw
-            .x_ext_fft_columns
-            .chunks_exact(FIELD_ELEMENTS_PER_CELL * size_of::<g1_t>())
-        {
-            x_ext_fft_columns.push(try_cast_slice::<_, g1_t>(column)?.as_ptr())
-        }
-        let x_ext_fft_columns = Box::leak(x_ext_fft_columns.into_boxed_slice());
+        #[cfg(feature = "x_ext_fft_columns")]
+        let x_ext_fft_columns = {
+            let mut x_ext_fft_columns = Vec::with_capacity(2 * CELLS_PER_BLOB);
+            for column in raw
+                .x_ext_fft_columns
+                .chunks_exact(FIELD_ELEMENTS_PER_CELL * size_of::<g1_t>())
+            {
+                x_ext_fft_columns.push(try_cast_slice::<_, g1_t>(column)?.as_ptr())
+            }
+            Box::leak(x_ext_fft_columns.into_boxed_slice())
+        };
 
         let settings = Self {
             roots_of_unity: try_cast_slice::<_, fr_t>(&raw.roots_of_unity)?.as_ptr() as *mut fr_t,
@@ -201,7 +208,10 @@ impl KZGSettings {
                 as *mut g1_t,
             g2_values_monomial: try_cast_slice::<_, g2_t>(&raw.g2_values_monomial)?.as_ptr()
                 as *mut g2_t,
+            #[cfg(feature = "x_ext_fft_columns")]
             x_ext_fft_columns: x_ext_fft_columns.as_mut_ptr() as *mut *mut g1_t,
+            #[cfg(not(feature = "x_ext_fft_columns"))]
+            x_ext_fft_columns: ptr::null_mut(),
             tables: ptr::null_mut(),
             wbits: 0,
             scratch_size: raw.scratch_size,
@@ -1113,6 +1123,7 @@ mod tests {
                 slice::from_raw_parts(exp_settings.g2_values_monomial, NUM_G2_POINTS),
                 slice::from_raw_parts(settings.g2_values_monomial, NUM_G2_POINTS)
             );
+            #[cfg(feature = "x_ext_fft_columns")]
             {
                 let exp_fft_columns =
                     slice::from_raw_parts(exp_settings.x_ext_fft_columns, 2 * CELLS_PER_BLOB);
