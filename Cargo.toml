@@ -44,11 +44,11 @@ no-threads = ["blst/no-threads"]
 risc0-ffi = []
 
 # Enable this feature for EIP-7594 support
-eip_7594 = []
+eip-7594 = []
 
 # When this is enabled, the g1_values_lagrange_brp.bin, g1_values_monomial.bin, g2_values_monomial.bin,
 # reverse_roots_of_unity.bin, roots_of_unity.bin and x_ext_fft_columns.bin files are generated from scratch
-generate_ethereum_kzg_settings = ["ethereum_kzg_settings", "std", "eip_7594"]
+generate_ethereum_kzg_settings = ["ethereum_kzg_settings", "std", "eip-7594"]
 
 [dependencies]
 arbitrary = { version = "1", features = ["derive"] }

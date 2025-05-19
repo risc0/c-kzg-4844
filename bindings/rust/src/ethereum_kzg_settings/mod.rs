@@ -49,9 +49,9 @@ fn load_kzg_settings() -> &'static KzgSettings {
             g1_values_monomial: *include_bytes!("g1_values_monomial.bin"),
             g1_values_lagrange_brp: *include_bytes!("g1_values_lagrange_brp.bin"),
             g2_values_monomial: *include_bytes!("g2_values_monomial.bin"),
-            #[cfg(feature = "eip_7594")]
+            #[cfg(feature = "eip-7594")]
             x_ext_fft_columns: *include_bytes!("x_ext_fft_columns.bin"),
-            #[cfg(not(feature = "eip_7594"))]
+            #[cfg(not(feature = "eip-7594"))]
             x_ext_fft_columns: [],
             scratch_size: 0,
         };
