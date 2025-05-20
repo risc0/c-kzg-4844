@@ -43,9 +43,12 @@ no-threads = ["blst/no-threads"]
 # Defines malloc/calloc/free/assert for C.
 risc0-ffi = []
 
-# When this is enabled, the roots_of_unity.bin, g1_points.bin and g2_points.bin
-# files are generated from scratch
-generate_ethereum_kzg_settings = ["ethereum_kzg_settings", "std"]
+# Enable this feature for EIP-7594 support
+eip-7594 = []
+
+# When this is enabled, the g1_values_lagrange_brp.bin, g1_values_monomial.bin, g2_values_monomial.bin,
+# reverse_roots_of_unity.bin, roots_of_unity.bin and x_ext_fft_columns.bin files are generated from scratch
+generate_ethereum_kzg_settings = ["ethereum_kzg_settings", "std", "eip-7594"]
 
 [dependencies]
 arbitrary = { version = "1", features = ["derive"] }
@@ -62,8 +65,10 @@ once_cell = { version = "1.21", default-features = false, features = [
 ], optional = true }
 
 [dev-dependencies]
+c-kzg = { path = ".", features = ["std"] }
 criterion = "0.5.1"
 glob = "0.3.2"
+once_cell = "1.21"
 rand = "0.9.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.140"

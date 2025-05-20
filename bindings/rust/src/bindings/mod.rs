@@ -114,8 +114,12 @@ pub(crate) struct RawKzgSettings {
     pub g1_values_lagrange_brp: [u8; NUM_G1_POINTS * size_of::<g1_t>()],
     #[doc = " G2 group elements from the trusted setup in monomial form.\n The array contains `NUM_G2_POINTS` elements."]
     pub g2_values_monomial: [u8; NUM_G2_POINTS * size_of::<g2_t>()],
+    #[cfg(feature = "eip-7594")]
     #[doc = " Data used during FK20 proof generation."]
     pub x_ext_fft_columns: [u8; 2 * CELLS_PER_BLOB * FIELD_ELEMENTS_PER_CELL * size_of::<g1_t>()],
+    #[cfg(not(feature = "eip-7594"))]
+    #[doc = " Data used during FK20 proof generation."]
+    pub x_ext_fft_columns: [u8; 0],
     #[doc = " The scratch size for the fixed-base MSM."]
     pub scratch_size: usize,
 }
@@ -180,14 +184,17 @@ impl KZGSettings {
         raw: &'static RawKzgSettings,
     ) -> Result<&'static Self, bytemuck::PodCastError> {
         // allocate and leak memory for the table
-        let mut x_ext_fft_columns = Vec::with_capacity(2 * CELLS_PER_BLOB);
-        for column in raw
-            .x_ext_fft_columns
-            .chunks_exact(FIELD_ELEMENTS_PER_CELL * size_of::<g1_t>())
-        {
-            x_ext_fft_columns.push(try_cast_slice::<_, g1_t>(column)?.as_ptr())
-        }
-        let x_ext_fft_columns = Box::leak(x_ext_fft_columns.into_boxed_slice());
+        #[cfg(feature = "eip-7594")]
+        let x_ext_fft_columns = {
+            let mut x_ext_fft_columns = Vec::with_capacity(2 * CELLS_PER_BLOB);
+            for column in raw
+                .x_ext_fft_columns
+                .chunks_exact(FIELD_ELEMENTS_PER_CELL * size_of::<g1_t>())
+            {
+                x_ext_fft_columns.push(try_cast_slice::<_, g1_t>(column)?.as_ptr())
+            }
+            Box::leak(x_ext_fft_columns.into_boxed_slice())
+        };
 
         let settings = Self {
             roots_of_unity: try_cast_slice::<_, fr_t>(&raw.roots_of_unity)?.as_ptr() as *mut fr_t,
@@ -201,7 +208,10 @@ impl KZGSettings {
                 as *mut g1_t,
             g2_values_monomial: try_cast_slice::<_, g2_t>(&raw.g2_values_monomial)?.as_ptr()
                 as *mut g2_t,
+            #[cfg(feature = "eip-7594")]
             x_ext_fft_columns: x_ext_fft_columns.as_mut_ptr() as *mut *mut g1_t,
+            #[cfg(not(feature = "eip-7594"))]
+            x_ext_fft_columns: ptr::null_mut(),
             tables: ptr::null_mut(),
             wbits: 0,
             scratch_size: raw.scratch_size,
@@ -597,6 +607,7 @@ impl KZGSettings {
         }
     }
 
+    #[cfg(feature = "eip-7594")]
     pub fn compute_cells(&self, blob: &Blob) -> Result<Box<[Cell; CELLS_PER_EXT_BLOB]>, Error> {
         let mut cells = [Cell::default(); CELLS_PER_EXT_BLOB];
         unsafe {
@@ -609,6 +620,7 @@ impl KZGSettings {
         }
     }
 
+    #[cfg(feature = "eip-7594")]
     pub fn compute_cells_and_kzg_proofs(
         &self,
         blob: &Blob,
@@ -632,6 +644,7 @@ impl KZGSettings {
         }
     }
 
+    #[cfg(feature = "eip-7594")]
     pub fn recover_cells_and_kzg_proofs(
         &self,
         cell_indices: &[u64],
@@ -1063,6 +1076,7 @@ unsafe impl Send for KZGSettings {}
 mod tests {
     use super::*;
     use crate::KzgSettings;
+    use once_cell::sync::Lazy;
     use rand::{rngs::ThreadRng, Rng};
     use std::{fs, iter::zip, path::PathBuf};
     use test_formats::{
@@ -1113,6 +1127,7 @@ mod tests {
                 slice::from_raw_parts(exp_settings.g2_values_monomial, NUM_G2_POINTS),
                 slice::from_raw_parts(settings.g2_values_monomial, NUM_G2_POINTS)
             );
+            #[cfg(feature = "eip-7594")]
             {
                 let exp_fft_columns =
                     slice::from_raw_parts(exp_settings.x_ext_fft_columns, 2 * CELLS_PER_BLOB);
@@ -1194,6 +1209,20 @@ mod tests {
         test_simple(trusted_setup_file);
     }
 
+    fn trusted_setup() -> &'static KZGSettings {
+        if cfg!(feature = "ethereum_kzg_settings") {
+            crate::ethereum_kzg_settings::ethereum_kzg_settings(0)
+        } else {
+            &KZG_SETTINGS
+        }
+    }
+
+    static KZG_SETTINGS: Lazy<KZGSettings> = Lazy::new(|| {
+        let trusted_setup_file = Path::new("src/trusted_setup.txt");
+        assert!(trusted_setup_file.exists());
+        KZGSettings::load_trusted_setup_file(trusted_setup_file, 0).unwrap()
+    });
+
     const BLOB_TO_KZG_COMMITMENT_TESTS: &str = "tests/blob_to_kzg_commitment/*/*/*";
     const COMPUTE_KZG_PROOF_TESTS: &str = "tests/compute_kzg_proof/*/*/*";
     const COMPUTE_BLOB_KZG_PROOF_TESTS: &str = "tests/compute_blob_kzg_proof/*/*/*";
@@ -1208,9 +1237,7 @@ mod tests {
 
     #[test]
     fn test_blob_to_kzg_commitment() {
-        let trusted_setup_file = Path::new("src/trusted_setup.txt");
-        assert!(trusted_setup_file.exists());
-        let kzg_settings = KZGSettings::load_trusted_setup_file(trusted_setup_file, 0).unwrap();
+        let kzg_settings = trusted_setup();
         let test_files: Vec<PathBuf> = glob::glob(BLOB_TO_KZG_COMMITMENT_TESTS)
             .unwrap()
             .map(Result::unwrap)
@@ -1257,9 +1284,7 @@ mod tests {
 
     #[test]
     fn test_compute_kzg_proof() {
-        let trusted_setup_file = Path::new("src/trusted_setup.txt");
-        assert!(trusted_setup_file.exists());
-        let kzg_settings = KZGSettings::load_trusted_setup_file(trusted_setup_file, 0).unwrap();
+        let kzg_settings = trusted_setup();
         let test_files: Vec<PathBuf> = glob::glob(COMPUTE_KZG_PROOF_TESTS)
             .unwrap()
             .map(Result::unwrap)
@@ -1302,9 +1327,7 @@ mod tests {
 
     #[test]
     fn test_compute_blob_kzg_proof() {
-        let trusted_setup_file = Path::new("src/trusted_setup.txt");
-        assert!(trusted_setup_file.exists());
-        let kzg_settings = KZGSettings::load_trusted_setup_file(trusted_setup_file, 0).unwrap();
+        let kzg_settings = trusted_setup();
         let test_files: Vec<PathBuf> = glob::glob(COMPUTE_BLOB_KZG_PROOF_TESTS)
             .unwrap()
             .map(Result::unwrap)
@@ -1345,9 +1368,7 @@ mod tests {
 
     #[test]
     fn test_verify_kzg_proof() {
-        let trusted_setup_file = Path::new("src/trusted_setup.txt");
-        assert!(trusted_setup_file.exists());
-        let kzg_settings = KZGSettings::load_trusted_setup_file(trusted_setup_file, 0).unwrap();
+        let kzg_settings = trusted_setup();
         let test_files: Vec<PathBuf> = glob::glob(VERIFY_KZG_PROOF_TESTS)
             .unwrap()
             .map(Result::unwrap)
@@ -1394,9 +1415,7 @@ mod tests {
 
     #[test]
     fn test_verify_blob_kzg_proof() {
-        let trusted_setup_file = Path::new("src/trusted_setup.txt");
-        assert!(trusted_setup_file.exists());
-        let kzg_settings = KZGSettings::load_trusted_setup_file(trusted_setup_file, 0).unwrap();
+        let kzg_settings = trusted_setup();
         let test_files: Vec<PathBuf> = glob::glob(VERIFY_BLOB_KZG_PROOF_TESTS)
             .unwrap()
             .map(Result::unwrap)
@@ -1441,9 +1460,7 @@ mod tests {
 
     #[test]
     fn test_verify_blob_kzg_proof_batch() {
-        let trusted_setup_file = Path::new("src/trusted_setup.txt");
-        assert!(trusted_setup_file.exists());
-        let kzg_settings = KZGSettings::load_trusted_setup_file(trusted_setup_file, 0).unwrap();
+        let kzg_settings = trusted_setup();
         let test_files: Vec<PathBuf> = glob::glob(VERIFY_BLOB_KZG_PROOF_BATCH_TESTS)
             .unwrap()
             .map(Result::unwrap)
@@ -1493,10 +1510,9 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "eip-7594")]
     fn test_compute_cells() {
-        let trusted_setup_file = Path::new("src/trusted_setup.txt");
-        assert!(trusted_setup_file.exists());
-        let kzg_settings = KZGSettings::load_trusted_setup_file(trusted_setup_file, 0).unwrap();
+        let kzg_settings = trusted_setup();
         let test_files: Vec<PathBuf> = glob::glob(COMPUTE_CELLS_TESTS)
             .unwrap()
             .map(Result::unwrap)
@@ -1534,10 +1550,9 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "eip-7594")]
     fn test_compute_cells_and_kzg_proofs() {
-        let trusted_setup_file = Path::new("src/trusted_setup.txt");
-        assert!(trusted_setup_file.exists());
-        let kzg_settings = KZGSettings::load_trusted_setup_file(trusted_setup_file, 0).unwrap();
+        let kzg_settings = trusted_setup();
         let test_files: Vec<PathBuf> = glob::glob(COMPUTE_CELLS_AND_KZG_PROOFS_TESTS)
             .unwrap()
             .map(Result::unwrap)
@@ -1582,10 +1597,9 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "eip-7594")]
     fn test_recover_cells_and_kzg_proofs() {
-        let trusted_setup_file = Path::new("src/trusted_setup.txt");
-        assert!(trusted_setup_file.exists());
-        let kzg_settings = KZGSettings::load_trusted_setup_file(trusted_setup_file, 0).unwrap();
+        let kzg_settings = trusted_setup();
         let test_files: Vec<PathBuf> = glob::glob(RECOVER_CELLS_AND_KZG_PROOFS_TESTS)
             .unwrap()
             .map(Result::unwrap)
@@ -1637,10 +1651,9 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "eip-7594")]
     fn test_verify_cell_kzg_proof_batch() {
-        let trusted_setup_file = Path::new("src/trusted_setup.txt");
-        assert!(trusted_setup_file.exists());
-        let kzg_settings = KZGSettings::load_trusted_setup_file(trusted_setup_file, 0).unwrap();
+        let kzg_settings = trusted_setup();
         let test_files: Vec<PathBuf> = glob::glob(VERIFY_CELL_KZG_PROOF_BATCH_TESTS)
             .unwrap()
             .map(Result::unwrap)
