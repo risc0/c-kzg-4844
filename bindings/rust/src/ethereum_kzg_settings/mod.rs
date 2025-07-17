@@ -5,8 +5,8 @@ use once_cell::sync::Lazy;
 static ETHEREUM_KZG_SETTINGS: Lazy<&'static KzgSettings> = Lazy::new(load_kzg_settings);
 
 /// Returns default Ethereum mainnet KZG settings.
-pub fn ethereum_kzg_settings(precompute: u64) -> &'static KzgSettings {
-    assert_eq!(precompute, 0);
+#[inline]
+pub fn ethereum_kzg_settings(_precompute: u64) -> &'static KzgSettings {
     *ETHEREUM_KZG_SETTINGS
 }
 
