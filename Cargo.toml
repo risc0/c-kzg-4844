@@ -20,7 +20,7 @@ build = "bindings/rust/build.rs"
 path = "bindings/rust/src/lib.rs"
 
 [features]
-default = ["std", "portable", "ethereum_kzg_settings"]
+default = ["std", "portable", "ethereum_kzg_settings", "risc0-ffi"]
 std = ["hex/std", "libc/std", "serde?/std", "once_cell?/std"]
 serde = ["dep:serde"]
 arbitrary = ["dep:arbitrary"]
@@ -40,9 +40,21 @@ portable = ["blst/portable"]
 # Engaged on wasm32 target architecture automatically.
 no-threads = ["blst/no-threads"]
 
+# RISC Zero zkVM FFI bindings.
+# Defines malloc/calloc/free/assert for C.
+risc0-ffi = []
+
+# Enable this feature for EIP-7594 support
+eip-7594 = []
+
+# When this is enabled, the g1_values_lagrange_brp.bin, g1_values_monomial.bin, g2_values_monomial.bin,
+# reverse_roots_of_unity.bin, roots_of_unity.bin and x_ext_fft_columns.bin files are generated from scratch
+generate_ethereum_kzg_settings = ["ethereum_kzg_settings", "std", "eip-7594"]
+
 [dependencies]
 arbitrary = { version = "1", features = ["derive"], optional = true }
 blst = { version = "0.3.15", default-features = false }
+bytemuck = { version = "1.0" }
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 libc = { version = "0.2", default-features = false }
 serde = { version = "1.0", optional = true, default-features = false, features = [
@@ -54,8 +66,10 @@ once_cell = { version = "1.21", default-features = false, features = [
 ], optional = true }
 
 [dev-dependencies]
+c-kzg = { path = ".", features = ["std"] }
 criterion = "0.5.1"
 glob = "0.3.2"
+once_cell = "1.21"
 rand = "0.9.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.140"
